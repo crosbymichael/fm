@@ -35,7 +35,9 @@ var bulkMoveCommand = cli.Command{
 				return errors.Wrap(err, "cannot get absolute path")
 			}
 		}
-		w := &walker{}
+		w := &walker{
+			base: path,
+		}
 		if clix.Bool("files") {
 			w.handlers = append(w.handlers, skipDirs)
 		}
@@ -45,22 +47,32 @@ var bulkMoveCommand = cli.Command{
 		if err := filepath.Walk(path, w.walk); err != nil {
 			return errors.Wrapf(err, "walking %s", path)
 		}
-		tmp, err := tempFile(w.results)
+		tmp, err := tempFile(path, w.results)
 		if err != nil {
 			return err
 		}
 		if err := startEditor(tmp); err != nil {
 			return errors.Wrap(err, "running editor")
 		}
-		moves, err := createMoveMap(w.results, tmp)
+		moves, err := createMoveMap(path, w.results, tmp)
 		if err != nil {
 			return err
 		}
+		var i int
 		for src, dest := range moves {
-			if dest == "" {
+			if shouldSkipDisplay(src, dest) {
 				continue
 			}
-			fmt.Printf("%s -> %s\n", src, dest)
+			rel, err := display(path, src)
+			if err != nil {
+				return errors.Wrap(err, "display path")
+			}
+			fmt.Printf("%s -> %s\n", rel, dest)
+			i++
+		}
+		if i == 0 {
+			fmt.Println("no edits made")
+			return nil
 		}
 		ln.SetMultiline(true)
 		answer, err := ln.Line("Commit? ")
@@ -69,7 +81,7 @@ var bulkMoveCommand = cli.Command{
 		}
 		if strings.TrimSpace(strings.ToUpper(answer)) == "YES" {
 			for src, dest := range moves {
-				if dest == "" {
+				if shouldSkipDisplay(src, dest) {
 					continue
 				}
 				if err := os.Rename(src, dest); err != nil {
@@ -81,7 +93,17 @@ var bulkMoveCommand = cli.Command{
 	},
 }
 
-func tempFile(results []*extInfo) (string, error) {
+func shouldSkipDisplay(src, dest string) bool {
+	if dest == "" {
+		return true
+	}
+	if src == dest {
+		return true
+	}
+	return false
+}
+
+func tempFile(path string, results []*extInfo) (string, error) {
 	f, err := ioutil.TempFile("", "")
 	if err != nil {
 		return "", errors.Wrap(err, "create tmp file")
@@ -89,7 +111,11 @@ func tempFile(results []*extInfo) (string, error) {
 	defer f.Close()
 
 	for _, r := range results {
-		if _, err := fmt.Fprintln(f, r.Path); err != nil {
+		rel, err := display(path, r.Path)
+		if err != nil {
+			return "", errors.Wrap(err, "get display path")
+		}
+		if _, err := fmt.Fprintln(f, rel); err != nil {
 			return "", errors.Wrap(err, "write path to file")
 		}
 	}
@@ -109,7 +135,11 @@ func startEditor(path string) error {
 
 const skipMoveToken = '#'
 
-func createMoveMap(results []*extInfo, path string) (map[string]string, error) {
+func display(base, path string) (string, error) {
+	return filepath.Rel(base, path)
+}
+
+func createMoveMap(base string, results []*extInfo, path string) (map[string]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, errors.Wrapf(err, "open %s", path)
@@ -131,6 +161,9 @@ func createMoveMap(results []*extInfo, path string) (map[string]string, error) {
 		}
 		if line[0] == skipMoveToken {
 			out[results[i].Path] = ""
+		}
+		if !filepath.IsAbs(line) {
+			line = filepath.Join(base, line)
 		}
 		out[results[i].Path] = line
 		i++

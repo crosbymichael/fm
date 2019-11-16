@@ -14,6 +14,7 @@ import (
 var errBreak = errors.New("break")
 
 type walker struct {
+	base     string
 	results  []*extInfo
 	handlers []filepath.WalkFunc
 }
@@ -21,8 +22,12 @@ type walker struct {
 func (w *walker) walk(path string, info os.FileInfo, ierr error) (err error) {
 	logrus.WithFields(logrus.Fields{
 		"path": path,
+		"base": w.base,
 		"name": info.Name(),
 	}).Debug("walking")
+	if path == w.base || path == "." {
+		return nil
+	}
 	for _, h := range w.handlers {
 		err = h(path, info, ierr)
 		if err != nil {
