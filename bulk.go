@@ -87,7 +87,10 @@ var bulkMoveCommand = cli.Command{
 				}
 				logrus.Debugf("%s -> %s", src, dest)
 				if err := os.Rename(src, dest); err != nil {
-					fmt.Printf("error %s: %s -> %s\n", err, src, dest)
+					if !strings.Contains(err.Error(), "invalid cross-device link") {
+						fmt.Printf("error %s: %s -> %s\n", err, src, dest)
+						continue
+					}
 
 					if err := copyFile(src, dest); err != nil {
 						logrus.WithError(err).Error("copy file fallback")
