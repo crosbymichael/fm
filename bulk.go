@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 
 	ln "github.com/GeertJohan/go.linenoise"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 )
 
@@ -51,6 +53,8 @@ var bulkMoveCommand = cli.Command{
 		if err != nil {
 			return err
 		}
+		defer os.Remove(tmp)
+
 		if err := startEditor(tmp); err != nil {
 			return errors.Wrap(err, "running editor")
 		}
@@ -63,11 +67,7 @@ var bulkMoveCommand = cli.Command{
 			if shouldSkipDisplay(src, dest) {
 				continue
 			}
-			rel, err := display(path, src)
-			if err != nil {
-				return errors.Wrap(err, "display path")
-			}
-			fmt.Printf("%s -> %s\n", rel, dest)
+			fmt.Printf("%s -> %s\n", src, dest)
 			i++
 		}
 		if i == 0 {
@@ -79,18 +79,40 @@ var bulkMoveCommand = cli.Command{
 		if err != nil {
 			return errors.Wrap(err, "readline")
 		}
-		if strings.TrimSpace(strings.ToUpper(answer)) == "YES" {
+		answer = strings.TrimSpace(strings.ToUpper(answer))
+		if answer == "YES" || answer == "Y" {
 			for src, dest := range moves {
 				if shouldSkipDisplay(src, dest) {
 					continue
 				}
+				logrus.Debugf("%s -> %s", src, dest)
 				if err := os.Rename(src, dest); err != nil {
-					fmt.Printf("error %s: %s -> %d\n", err, src, dest)
+					fmt.Printf("error %s: %s -> %s\n", err, src, dest)
+
+					if err := copyFile(src, dest); err != nil {
+						logrus.WithError(err).Error("copy file fallback")
+					}
 				}
 			}
 		}
 		return nil
 	},
+}
+
+func copyFile(src, dest string) error {
+	f, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	sf, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer sf.Close()
+
+	_, err = io.Copy(f, sf)
+	return err
 }
 
 func shouldSkipDisplay(src, dest string) bool {
@@ -155,8 +177,8 @@ func createMoveMap(base string, results []*extInfo, path string) (map[string]str
 		if err := s.Err(); err != nil {
 			return nil, errors.Wrap(err, "scan error")
 		}
-		line := s.Text()
-		if strings.TrimSpace(line) == "" {
+		line := strings.TrimSpace(s.Text())
+		if line == "" {
 			return nil, errors.New("unable to continue with empty line")
 		}
 		if line[0] == skipMoveToken {

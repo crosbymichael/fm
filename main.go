@@ -27,6 +27,7 @@ func main() {
 	}
 	app.Commands = []cli.Command{
 		bulkMoveCommand,
+		dupsCommand,
 	}
 	if err := app.Run(os.Args); err != nil {
 		fmt.Fprintln(os.Stderr, err)

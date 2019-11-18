@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/md5"
 	"encoding/hex"
 	"hash"
 	"io"
@@ -15,6 +16,7 @@ var errBreak = errors.New("break")
 
 type walker struct {
 	base     string
+	hash     bool
 	results  []*extInfo
 	handlers []filepath.WalkFunc
 }
@@ -37,7 +39,7 @@ func (w *walker) walk(path string, info os.FileInfo, ierr error) (err error) {
 			return err
 		}
 	}
-	i, err := getInfo(path, info)
+	i, err := w.getInfo(path, info)
 	if err != nil {
 		if os.IsNotExist(errors.Cause(err)) {
 			return nil
@@ -86,18 +88,21 @@ func (i *extInfo) String() string {
 	return i.Path
 }
 
-func getInfo(path string, info os.FileInfo) (*extInfo, error) {
-	/*
+func (w *walker) getInfo(path string, info os.FileInfo) (*extInfo, error) {
+	var (
+		sum string
+		err error
+	)
+	if w.hash {
 		h := md5.New()
-		sum, err := hashFile(h, path)
-		if err != nil {
+		if sum, err = hashFile(h, path); err != nil {
 			return nil, err
 		}
-	*/
+	}
 	return &extInfo{
 		FileInfo: info,
 		Path:     path,
-		//MD5:      sum,
+		MD5:      sum,
 	}, nil
 }
 
