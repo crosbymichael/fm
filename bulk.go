@@ -191,6 +191,8 @@ func createMoveMap(base string, results []*extInfo, path string) (map[string]str
 		}
 		if line[0] == skipMoveToken {
 			out[results[i].Path] = ""
+			i++
+			continue
 		}
 		if !filepath.IsAbs(line) {
 			line = filepath.Join(base, line)
