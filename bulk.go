@@ -149,6 +149,11 @@ func tempFile(path string, results []*extInfo) (string, error) {
 
 func startEditor(path string) error {
 	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		return errors.New(`no default editor set.
+		please set a default editor of your choice. e.g:
+		export EDITOR=vim`)
+	}
 	cmd := exec.Command(editor, path)
 	cmd.Env = os.Environ()
 	cmd.Stdin = os.Stdin
